@@ -13,21 +13,13 @@ import { ConfigManager } from './utils/configManager';
 import { CONFIG_FILE_NAME, VSC_CONFIG_NAMESPACE } from './constants';
 import { PromptLoader } from './services/promptLoader';
 import { UpdateChecker } from './utils/updateChecker';
-import { PermissionManager } from './features/permission/permissionManager';
-import { NotificationUtils } from './utils/notificationUtils';
 import { SpecTaskCodeLensProvider } from './providers/specTaskCodeLensProvider';
 
 let claudeCodeProvider: ClaudeCodeProvider;
 let specManager: SpecManager;
 let steeringManager: SteeringManager;
-let permissionManager: PermissionManager;
 let agentManager: AgentManager;
 export let outputChannel: vscode.OutputChannel;
-
-// 导出 getter 函数供其他模块使用
-export function getPermissionManager(): PermissionManager {
-    return permissionManager;
-}
 
 export async function activate(context: vscode.ExtensionContext) {
     // Create output channel for debugging
@@ -52,12 +44,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Initialize Claude Code SDK provider with output channel
     claudeCodeProvider = new ClaudeCodeProvider(context, outputChannel);
-
-    // 创建并初始化 PermissionManager
-    permissionManager = new PermissionManager(context, outputChannel);
-
-    // 初始化权限系统（包含重试逻辑）
-    await permissionManager.initializePermissions();
 
     // Initialize feature managers with output channel
     specManager = new SpecManager(claudeCodeProvider, outputChannel);
@@ -231,27 +217,6 @@ async function toggleViews() {
 
 
 function registerCommands(context: vscode.ExtensionContext, specExplorer: SpecExplorerProvider, steeringExplorer: SteeringExplorerProvider, hooksExplorer: HooksExplorerProvider, mcpExplorer: MCPExplorerProvider, agentsExplorer: AgentsExplorerProvider, updateChecker: UpdateChecker) {
-
-    // Permission commands
-    context.subscriptions.push(
-        vscode.commands.registerCommand('kfc.permission.reset', async () => {
-            const confirm = await vscode.window.showWarningMessage(
-                'Are you sure you want to reset Claude Code permissions? This will revoke the granted permissions.',
-                'Yes', 'No'
-            );
-
-            if (confirm === 'Yes') {
-                const success = await permissionManager.resetPermission();
-                if (success) {
-                    NotificationUtils.showAutoDismissNotification(
-                        'Permissions have been reset'
-                    );
-                } else {
-                    vscode.window.showErrorMessage('Failed to reset permissions. Please check the output log.');
-                }
-            }
-        })
-    );
 
     // Spec commands
     const createSpecCommand = vscode.commands.registerCommand('kfc.spec.create', async () => {
@@ -469,22 +434,6 @@ function registerCommands(context: vscode.ExtensionContext, specExplorer: SpecEx
             outputChannel.appendLine('Opening Kiro menu...');
             await toggleViews();
         }),
-
-        // Permission debug commands
-        vscode.commands.registerCommand('kfc.permission.check', async () => {
-            // 使用新的 PermissionManager 检查真实的权限状态
-            const hasPermission = await permissionManager.checkPermission();
-            const configPath = require('os').homedir() + '/.claude.json';
-
-            vscode.window.showInformationMessage(
-                `Claude Code Permission Status: ${hasPermission ? '✅ Granted' : '❌ Not Granted'}`
-            );
-
-            outputChannel.appendLine(`[Permission Check] Status: ${hasPermission}`);
-            outputChannel.appendLine(`[Permission Check] Config file: ${configPath}`);
-            outputChannel.appendLine(`[Permission Check] Checking bypassPermissionsModeAccepted field in ~/.claude.json`);
-        }),
-
     );
 }
 
@@ -548,8 +497,5 @@ function setupFileWatchers(
 }
 
 export function deactivate() {
-    // Cleanup
-    if (permissionManager) {
-        permissionManager.dispose();
-    }
+    // Nothing to clean up
 }

@@ -80,19 +80,13 @@ export class SteeringManager {
             // Show progress notification
             await NotificationUtils.showAutoDismissNotification(`Deleting "${documentName}" and updating CLAUDE.md...`);
 
-            // Execute Claude command to update CLAUDE.md
-            const result = await this.claudeCodeProvider.invokeClaudeHeadless(prompt);
+            // Run the CLAUDE.md update in a visible terminal so Claude Code can
+            // prompt for any permission it needs. The terminal is short-lived but
+            // must stay visible - a hidden interactive session would block on an
+            // invisible permission prompt.
+            await this.claudeCodeProvider.invokeClaudeSplitView(prompt, 'KFC - Delete Steering');
 
-            if (result.exitCode === 0) {
-                await NotificationUtils.showAutoDismissNotification(`Steering document "${documentName}" deleted and CLAUDE.md updated successfully.`);
-                return { success: true };
-            } else if (result.exitCode !== undefined) {
-                const error = `Failed to update CLAUDE.md. Exit code: ${result.exitCode}`;
-                this.outputChannel.appendLine(`[Steering] ${error}`);
-                return { success: false, error };
-            } else {
-                return { success: true }; // Assume success if no exit code
-            }
+            return { success: true };
         } catch (error) {
             const errorMsg = `Failed to delete steering document: ${error}`;
             this.outputChannel.appendLine(`[Steering] ${errorMsg}`);
@@ -196,7 +190,7 @@ export class SteeringManager {
         // Wait for Python extension to finish venv activation
         const delay = this.configManager.getTerminalDelay();
         setTimeout(() => {
-            terminal.sendText('claude --permission-mode bypassPermissions "/init"');
+            terminal.sendText('claude "/init"');
         }, delay);
     }
 

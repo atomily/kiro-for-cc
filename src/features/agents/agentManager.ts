@@ -24,6 +24,7 @@ export class AgentManager {
         'spec-system-prompt-loader',
         'spec-judge',
         'spec-impl',
+        'spec-impl-architect',
         'spec-test'
     ];
 

@@ -89,6 +89,39 @@ The spec workflow follows these states:
 
 Each transition requires explicit user approval. The workflow is implemented in `specPrompts.ts` and enforced by the spec agent system prompt.
 
+## ModelRole Mapping
+
+Implementation tasks in `tasks.md` declare the *reasoning role* they need, not a
+model name:
+
+```markdown
+- [ ] 2.1 Implement User model with validation
+  - _Requirements: 1.2_
+  - _ModelRole: worker_
+```
+
+| Role | Native agent | Current model policy | Use for |
+| ---- | ------------ | -------------------- | ------- |
+| `worker` | `spec-impl` | `sonnet` | Routine, bounded implementation work |
+| `architect` | `spec-impl-architect` | `inherit` | Architecture, reconciliation, integration, cross-cutting reasoning |
+
+A missing `_ModelRole:_` defaults to `worker`. Any value other than `worker` or
+`architect` is an error - Auto Mode stops and reports it rather than guessing.
+
+**The agent frontmatter is the single owner of the actual model setting.** This
+table is documentation only; it is not read at runtime. To change which model
+backs a role, edit that agent's `model:` field - do not add model logic to the
+extension. Role names are stable by design, so existing `tasks.md` files stay
+valid when the underlying model assignment changes.
+
+`spec-impl.md` and `spec-impl-architect.md` are behaviorally identical below
+their frontmatter and MUST stay synchronized; they differ only in `name`,
+`description`, and `model`.
+
+Routing applies to implementation-task dispatch only. `spec-requirements`,
+`spec-design`, `spec-tasks`, `spec-judge`, `spec-test`, and
+`spec-system-prompt-loader` all remain `model: inherit`.
+
 ## Claude Code Integration
 
 The extension integrates with Claude CLI through the `ClaudeCodeProvider`:

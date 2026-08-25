@@ -98,6 +98,7 @@ Convert the feature design into a series of prompts for a code-generation LLM th
 - A clear objective as the task description that involves writing, modifying, or testing code
 - Additional information as sub-bullets under the task
 - Specific references to requirements from the requirements document (referencing granular sub-requirements, not just user stories)
+- A `_ModelRole:_` sub-bullet declaring the reasoning role the task needs (see "Assigning ModelRole" below)
 - The model MUST ensure that the implementation plan is a series of discrete, manageable coding steps
 - The model MUST ensure each task references specific requirements from the requirement document
 - The model MUST NOT include excessive implementation details that are already covered in the design document
@@ -141,6 +142,46 @@ Convert the feature design into a series of prompts for a code-generation LLM th
 - The model MUST inform the user that they can begin executing tasks by opening the tasks.md file, and clicking "Start task" next to task items.
 - The model MUST place the Tasks Dependency Diagram section at the END of the tasks document, after all task items have been listed
 
+### Assigning ModelRole
+
+Every executable implementation task MUST carry a `_ModelRole:_` sub-bullet
+declaring the reasoning role required to execute it. Supported values are ONLY
+`worker` and `architect`. Declare the required role ahead of time - the
+orchestrator routes on this annotation and will not guess.
+
+Write the role, never a concrete model name. The role is a stable contract; the
+model backing each role is configuration owned by the agent definitions and may
+change without editing existing tasks.md files.
+
+Use `_ModelRole: worker_` when the task is:
+
+- bounded and well specified
+- implementation-oriented
+- isolated to a single subsystem or file surface
+- primarily mechanical
+- writing tests
+- authoring one document/skill from already-audited source material
+- performing a read-only audit
+- a straightforward migration with a complete manifest
+
+Use `_ModelRole: architect_` when the task primarily involves:
+
+- reconciling outputs from multiple agents
+- architecture decisions
+- resolving ownership boundaries
+- cross-subsystem integration
+- updating a central routing or architecture document
+- shared interface design
+- resolving contradictions
+- integration after a parallel wave
+- final architectural review or reconciliation
+- high-contention shared configuration where broad context is required
+
+**The model MUST NOT choose `architect` merely because a task is large or
+time-consuming.** A large but precisely bounded task is still a `worker` task.
+Choose `architect` only when the task genuinely requires reasoning across
+subsystem boundaries or reconciling competing outputs.
+
 **Example Format (truncated):**
 
 ```markdown
@@ -150,12 +191,14 @@ Convert the feature design into a series of prompts for a code-generation LLM th
  - Create directory structure for models, services, repositories, and API components
  - Define interfaces that establish system boundaries
  - _Requirements: 1.1_
+ - _ModelRole: architect_
 
 - [ ] 2. Implement data models and validation
 - [ ] 2.1 Create core data model interfaces and types
   - Write TypeScript interfaces for all data models
   - Implement validation functions for data integrity
   - _Requirements: 2.1, 3.3, 1.2_
+  - _ModelRole: worker_
 
 - [ ] 2.2 Implement User model with validation
   - Write User class with validation methods

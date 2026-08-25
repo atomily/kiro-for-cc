@@ -61,6 +61,7 @@ A VSCode extension that brings spec-driven development to Claude Code. Manage yo
 ### ⚙️ Others
 
 - **Settings Management**: Centralized configuration
+- **Permission-Neutral**: Claude Code owns all permission decisions — the extension never overrides them (see [Permissions](#permissions))
 
 ## Screenshot
 
@@ -84,6 +85,34 @@ A VSCode extension that brings spec-driven development to Claude Code. Manage yo
 | Windows (CMD)             | ❌       | Not supported                            | TBD      |
 | Windows (PowerShell)      | ❌       | Not supported                            | TBD      |
 | Windows (MinTTY Git Bash) | ❌       | Not supported                            | TBD      |
+
+### Permissions
+
+**As of v0.3.0, this extension does not manage Claude Code permissions.**
+
+Kiro orchestrates specs, terminals, and agents. Claude Code remains solely responsible for:
+
+- permission mode
+- filesystem approval
+- command approval
+- workspace access
+- user / global / project permission policy
+
+Claude is invoked with **no `--permission-mode` flag**, so your normal Claude Code
+settings precedence applies (enterprise → CLI → local project → project → user).
+If you want to pre-approve actions, add `allow` rules to your own Claude Code
+settings rather than relying on an extension-level override.
+
+> [!WARNING]
+> **Upgrading from v0.2.9 or earlier?**
+> Previous versions forced `--permission-mode bypassPermissions` on every Claude
+> invocation and wrote `bypassPermissionsModeAccepted: true` into your global
+> `~/.claude.json`. v0.3.0 no longer reads or writes that field, and it
+> deliberately does **not** modify your existing configuration.
+>
+> If you do not want that value, remove or change it yourself through your normal
+> Claude Code configuration. You may now see permission prompts where previously
+> there were none — this is intended.
 
 ### From Extension Marketplace
 
@@ -125,7 +154,7 @@ code --install-extension kiro-for-cc-{latest-version}.vsix
 cursor --install-extension kiro-for-cc-{latest-version}.vsix
 ```
 
-Replace `{latest-version}` with the actual version number, e.g., `0.2.4`.
+Replace `{latest-version}` with the actual version number, e.g., `0.3.0`.
 
 ## Usage
 

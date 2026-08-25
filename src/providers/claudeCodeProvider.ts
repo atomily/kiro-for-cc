@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ConfigManager } from '../utils/configManager';
 import { VSC_CONFIG_NAMESPACE } from '../constants';
-import { getPermissionManager } from '../extension';
 
 export class ClaudeCodeProvider {
     private context: vscode.ExtensionContext;
@@ -60,26 +59,18 @@ export class ClaudeCodeProvider {
     /**
      * Invokes Claude Code in a new terminal on the right side (split view) with the given prompt
      * Returns the terminal instance for potential renaming
+     *
+     * No permission-mode flag is passed: Claude Code applies its own settings
+     * precedence (enterprise / CLI / local project / project / user) and prompts
+     * the user directly for anything not already allowed.
      */
     async invokeClaudeSplitView(prompt: string, title: string = 'Kiro for Claude Code'): Promise<vscode.Terminal> {
         try {
-            // 获取 PermissionManager 并检查权限
-            const permissionManager = getPermissionManager();
-            if (permissionManager) {
-                const hasPermission = await permissionManager.checkPermission();
-                if (!hasPermission) {
-                    this.outputChannel.appendLine('[ClaudeCodeProvider] No permission, showing setup');
-                    const granted = await permissionManager.showPermissionSetup();
-                    if (!granted) {
-                        throw new Error('Claude Code permissions not granted');
-                    }
-                }
-            }
             // Create temp file with the prompt
             const promptFilePath = await this.createTempFile(prompt, 'prompt');
 
             // Build the command - use command substitution instead of input redirection
-            let command = `claude --permission-mode bypassPermissions "$(cat "${promptFilePath}")"`;
+            let command = `claude "$(cat "${promptFilePath}")"`;
 
             // Create a new terminal in the editor area (right side)
             const terminal = vscode.window.createTerminal({
@@ -135,130 +126,5 @@ export class ClaudeCodeProvider {
         await vscode.commands.executeCommand('workbench.action.terminal.renameWithArg', {
             name: newName
         });
-    }
-
-    /**
-     * Execute Claude command with specific tools in background
-     * Returns a promise that resolves when the command completes
-     */
-    async invokeClaudeHeadless(
-        prompt: string
-    ): Promise<{ exitCode: number | undefined; output?: string }> {
-        // 获取 PermissionManager 实例并检查权限
-        const permissionManager = getPermissionManager();
-        if (permissionManager) {
-            const hasPermission = await permissionManager.checkPermission();
-            if (!hasPermission) {
-                this.outputChannel.appendLine('[ClaudeCodeProvider] No permission, showing setup');
-                const granted = await permissionManager.showPermissionSetup();
-                if (!granted) {
-                    throw new Error('Claude Code permissions not granted');
-                }
-            }
-        }
-
-        this.outputChannel.appendLine(`[ClaudeCodeProvider] Invoking Claude Code in headless mode`);
-        this.outputChannel.appendLine(`========================================`);
-        this.outputChannel.appendLine(prompt);
-        this.outputChannel.appendLine(`========================================`);
-
-        // Get the workspace folder
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        const cwd = workspaceFolder?.uri.fsPath;
-
-        // Create temp file with the prompt
-        const promptFilePath = await this.createTempFile(prompt, 'background-prompt');
-
-        // Build command using command substitution instead of file redirection
-        let commandLine = `claude --permission-mode bypassPermissions "$(cat "${promptFilePath}")"`;
-
-        // Create hidden terminal for background execution
-        const terminal = vscode.window.createTerminal({
-            name: 'Claude Code Background',
-            cwd,
-            hideFromUser: true
-        });
-
-        return new Promise((resolve) => {
-            let shellIntegrationChecks = 0;
-            // Wait for shell integration to be available
-            const checkShellIntegration = setInterval(() => {
-                shellIntegrationChecks++;
-
-                if (terminal.shellIntegration) {
-                    clearInterval(checkShellIntegration);
-
-                    // Execute command with shell integration
-                    const execution = terminal.shellIntegration.executeCommand(commandLine);
-
-                    // Listen for command completion
-                    const disposable = vscode.window.onDidEndTerminalShellExecution(event => {
-                        if (event.terminal === terminal && event.execution === execution) {
-                            disposable.dispose();
-
-                            // Only log errors
-                            if (event.exitCode !== 0) {
-                                this.outputChannel.appendLine(`[Claude] Command failed with exit code: ${event.exitCode}`);
-                                this.outputChannel.appendLine(`[Claude] Command was: ${commandLine}`);
-                            }
-
-                            resolve({
-                                exitCode: event.exitCode,
-                                output: undefined
-                            });
-
-                            // Clean up terminal and temp file after a short delay
-                            setTimeout(async () => {
-                                terminal.dispose();
-                                try {
-                                    await fs.promises.unlink(promptFilePath);
-                                    this.outputChannel.appendLine(`[Claude] Cleaned up temp file: ${promptFilePath}`);
-                                } catch (e) {
-                                    // Ignore cleanup errors
-                                    this.outputChannel.appendLine(`[Claude] Failed to cleanup temp file: ${e}`);
-                                }
-                            }, 1000);
-                        }
-                    });
-                } else if (shellIntegrationChecks > 20) { // After 2 seconds
-                    // Fallback: execute without shell integration
-                    clearInterval(checkShellIntegration);
-                    this.outputChannel.appendLine(`[Claude] Shell integration not available, using fallback mode`);
-                    terminal.sendText(commandLine);
-
-                    // Resolve after a reasonable delay since we can't track completion
-                    setTimeout(async () => {
-                        resolve({ exitCode: undefined });
-                        terminal.dispose();
-                        // Clean up temp file
-                        try {
-                            await fs.promises.unlink(promptFilePath);
-                        } catch (e) {
-                            // Ignore cleanup errors
-                        }
-                    }, 5000);
-                }
-            }, 100);
-        });
-    }
-
-    /**
-     * 创建权限设置终端（供 PermissionManager 使用）
-     */
-    static createPermissionTerminal(): vscode.Terminal {
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        const terminal = vscode.window.createTerminal({
-            name: 'Claude Code - Permission Setup',
-            cwd: workspaceFolder,
-            location: { viewColumn: vscode.ViewColumn.Two }
-        });
-
-        terminal.show();
-        terminal.sendText(
-            'claude --permission-mode bypassPermissions',
-            true
-        );
-
-        return terminal;
     }
 }

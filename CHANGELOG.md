@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-08-25
+
+### ⚠️ Breaking Changes
+
+- Kiro no longer manages Claude Code permissions
+
+  Claude Code is now solely responsible for permission mode, filesystem
+  approval, command approval, workspace access, and user/global/project
+  permission policy. Kiro orchestrates specs, terminals, and agents only.
+
+  - Removed the hardcoded `--permission-mode bypassPermissions` flag from every
+    Claude CLI invocation. No permission-mode flag is passed at all, so Claude
+    Code's normal settings precedence (enterprise / CLI / local project /
+    project / user) applies.
+  - Removed the custom permission subsystem (`src/features/permission/`) and its
+    bypass-consent webview.
+  - Extension activation is no longer gated on bypass consent, and the extension
+    no longer offers to uninstall itself when consent is absent.
+  - Steering document deletion now runs in a visible terminal instead of a
+    hidden interactive Claude session, so Claude Code can prompt normally.
+  - Removed the `Check Permission Status` and `Reset Permissions` commands.
+
+  **Migration note:** versions up to and including 0.2.9 wrote
+  `bypassPermissionsModeAccepted: true` into your global `~/.claude.json`. This
+  version no longer reads or writes that field, and it deliberately does **not**
+  modify your existing configuration. If you do not want that value, remove or
+  change it yourself through your normal Claude Code configuration.
+
+  You may now see permission prompts where previously there were none. To
+  pre-approve actions, use `allow` rules in your own Claude Code settings rather
+  than an extension-level override.
+
 ## [0.2.9] - 2025-09-21
 
 ### 🐛 Bug Fixes

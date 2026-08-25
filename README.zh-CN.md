@@ -57,6 +57,7 @@
 ### ⚙️ 其他
 
 - **设置管理**：集中化配置管理
+- **权限中立**：所有权限决策均由 Claude Code 负责，本扩展不再覆盖（详见[权限说明](#权限说明)）
 
 ## 界面截图
 
@@ -80,6 +81,31 @@
 | Windows (CMD)             | ❌        | 不支持             | TBD      |
 | Windows (PowerShell)      | ❌        | 不支持             | TBD      |
 | Windows (MinTTY Git Bash) | ❌        | 不支持             | TBD      |
+
+### 权限说明
+
+**自 v0.3.0 起，本扩展不再管理 Claude Code 的权限。**
+
+Kiro 只负责编排 spec、终端与 agent。以下均由 Claude Code 独立负责：
+
+- 权限模式（permission mode）
+- 文件系统操作审批
+- 命令执行审批
+- 工作区访问
+- 用户级 / 全局 / 项目级权限策略
+
+调用 Claude 时**不再传递 `--permission-mode` 参数**，因此会按 Claude Code 正常的
+配置优先级生效（企业级 → 命令行 → 项目本地 → 项目 → 用户）。如需预先放行某些操作，
+请在你自己的 Claude Code 配置中添加 `allow` 规则，而不是依赖扩展层面的覆盖。
+
+> [!WARNING]
+> **从 v0.2.9 或更早版本升级？**
+> 旧版本会在每次调用 Claude 时强制加上 `--permission-mode bypassPermissions`，
+> 并将 `bypassPermissionsModeAccepted: true` 写入你的全局 `~/.claude.json`。
+> v0.3.0 不再读取或写入该字段，并且**不会**自动修改你已有的配置。
+>
+> 如果你不希望保留该值，请通过你自己的 Claude Code 配置手动删除或修改。
+> 升级后你可能会看到以前不会出现的权限确认提示，这是预期行为。
 
 ### 从扩展商店安装
 
@@ -121,7 +147,7 @@ code --install-extension kiro-for-cc-{latest-version}.vsix
 cursor --install-extension kiro-for-cc-{latest-version}.vsix
 ```
 
-将 `{latest-version}` 替换为实际版本号，例如 `0.2.4`。
+将 `{latest-version}` 替换为实际版本号，例如 `0.3.0`。
 
 ## 使用方法
 

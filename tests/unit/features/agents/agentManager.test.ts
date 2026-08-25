@@ -115,8 +115,8 @@ describe('AgentManager', () => {
             expect(vscode.workspace.fs.createDirectory).toHaveBeenCalledWith(
                 expect.objectContaining({ fsPath: targetPath })
             );
-            // Should copy all built-in agents (7) + system prompt (1) = 8
-            expect(vscode.workspace.fs.copy).toHaveBeenCalledTimes(8);
+            // Should copy all built-in agents (8) + system prompt (1) = 9
+            expect(vscode.workspace.fs.copy).toHaveBeenCalledTimes(9);
             expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
                 expect.stringContaining('[AgentManager] Copied agent')
             );

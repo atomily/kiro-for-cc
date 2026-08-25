@@ -137,7 +137,7 @@ stateDiagram-v2
 | Create Feature Design Document | spec-design(support parallel)       | .claude/specs/{feature_name}/design.md                       |
 | Create Task List               | spec-tasks(support parallel)        | .claude/specs/{feature_name}/tasks.md                        |
 | Judge(optional)                | spec-judge(support parallel)        | no doc, only call when user need to judge the spec documents |
-| Impl Task(optional)            | spec-impl(support parallel)         | no doc, only use when user requests parallel execution (>=2) |
+| Impl Task(optional)            | spec-impl / spec-impl-architect(support parallel) | no doc, only use when user requests parallel execution (>=2). Selected by the task's ModelRole - see "ModelRole routing" |
 | Test(optional)                 | spec-test(single call)              | no need to focus on, belongs to code resources               |
 
 ### Call method
@@ -202,12 +202,14 @@ Note:
 - spec_base_path: Spec document base path
 - doc_path: Document path
 
-#### Impl Task - spec-impl
+#### Impl Task - spec-impl / spec-impl-architect
 
 - feature_name: Feature name
 - spec_base_path: Spec document base path
 - task_id: Task ID to execute (e.g., "2.1")
 - language_preference: Language preference
+
+The subagent type is chosen by the task's ModelRole annotation - see "ModelRole routing" below.
 
 #### Test - spec-test
 
@@ -215,6 +217,41 @@ Note:
 - task_id: Task ID
 - feature_name: Feature name
 - spec_base_path: Spec document base path
+
+### ModelRole routing
+
+Implementation tasks declare the *reasoning role* they need via a `_ModelRole:_`
+sub-bullet in tasks.md. You MUST use that annotation to select which native
+subagent definition to dispatch. The role is the contract; the underlying model
+is configuration owned by the agent definition's frontmatter.
+
+| Task annotation | Dispatch subagent_type | Notes |
+| --------------- | ---------------------- | ----- |
+| `_ModelRole: worker_` | `spec-impl` | Routine, bounded implementation work |
+| `_ModelRole: architect_` | `spec-impl-architect` | Architecture, reconciliation, integration, cross-cutting reasoning |
+| (annotation absent) | `spec-impl` | Default is `worker` |
+
+**Constraints:**
+
+- You MUST read each task's `_ModelRole:_` annotation before dispatching it.
+- Supported values are ONLY `worker` and `architect`.
+- If a task has no `_ModelRole:_` annotation, you MUST default to `worker`
+  (`spec-impl`). This keeps bounded execution inexpensive by default.
+- If a task declares any other value (e.g. `_ModelRole: reviewer_`), you MUST
+  STOP and report the invalid value to the user, naming the task ID and the
+  offending value. You MUST NOT guess, and you MUST NOT silently fall back to a
+  default. Ask the user to correct the annotation before proceeding.
+- An explicit annotation ALWAYS wins. You MUST NOT override a declared role
+  because a task "looks architectural" or "looks routine" at runtime.
+- Runtime inference is permitted ONLY as a diagnostic: you MAY note that a task
+  annotated `worker` appears to involve cross-subsystem integration, but you
+  MUST still dispatch according to the declared role.
+- You MUST NOT pass model names to sub-agents. Model selection happens entirely
+  through which subagent definition you choose.
+- ModelRole routing applies to implementation-task dispatch only. It does NOT
+  affect spec-requirements, spec-design, spec-tasks, spec-judge, spec-test, or
+  spec-system-prompt-loader, all of which continue to inherit the parent
+  session model.
 
 #### Tree-based Judge Evaluation Rules
 
@@ -261,8 +298,17 @@ Example with 10 documents:
 - You MUST NOT combine multiple steps into a single interaction.
 - When executing implementation tasks from tasks.md:
   - **Default mode**: Main thread executes tasks directly for better user interaction
-  - **Parallel mode**: Use spec-impl agents when user explicitly requests parallel execution of specific tasks (e.g., "execute task2.1 and task2.2 in parallel")
-  - **Auto mode**: When user requests automatic/fast execution of all tasks (e.g., "execute all tasks automatically", "run everything quickly"), analyze task dependencies in tasks.md and orchestrate spec-impl agents to execute independent tasks in parallel while respecting dependencies
+  - **Parallel mode**: Use implementation agents when user explicitly requests parallel execution of specific tasks (e.g., "execute task2.1 and task2.2 in parallel"). Select each task's subagent type via its ModelRole annotation - see "ModelRole routing"
+  - **Auto mode**: When user requests automatic/fast execution of all tasks (e.g., "execute all tasks automatically", "run everything quickly"), analyze task dependencies in tasks.md and orchestrate implementation agents to execute independent tasks in parallel while respecting dependencies
+
+    Before dispatching any wave, you MUST resolve each task's ModelRole
+    annotation to a subagent type per "ModelRole routing". If ANY task in the
+    plan declares an unsupported role, STOP and report it before starting
+    execution - do not partially execute the plan.
+
+    ModelRole affects ONLY which subagent definition is dispatched. It MUST NOT
+    change dependency ordering, wave composition, or parallel dispatch limits.
+    Tasks with different roles may run in the same wave.
   
     Example dependency patterns:
 

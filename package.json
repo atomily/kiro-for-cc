@@ -2,7 +2,7 @@
   "name": "kiro-for-cc",
   "displayName": "Kiro for Claude Code",
   "description": "Spec-driven development with Claude Code - inspired by Kiro",
-  "version": "0.2.9",
+  "version": "0.3.0",
   "publisher": "heisebaiyun",
   "icon": "icon.png",
   "repository": {
@@ -196,18 +196,6 @@
         "title": "Kiro Menu",
         "category": "Kiro for CC",
         "icon": "$(ellipsis)"
-      },
-      {
-        "command": "kfc.permission.check",
-        "title": "Check Permission Status",
-        "category": "Kiro for CC",
-        "icon": "$(info)"
-      },
-      {
-        "command": "kfc.permission.reset",
-        "title": "Reset Permissions",
-        "category": "Kiro for CC",
-        "icon": "$(debug-restart)"
       },
       {
         "command": "kfc.spec.implTask",
