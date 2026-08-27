@@ -84,16 +84,26 @@ export class AgentManager {
         }
 
         const systemPromptDir = path.join(this.workspaceRoot, '.claude/system-prompts');
-        const sourcePath = path.join(this.extensionPath, 'dist/resources/prompts', 'spec-workflow-starter.md');
-        const targetPath = path.join(systemPromptDir, 'spec-workflow-starter.md');
+        const sourceDir = path.join(this.extensionPath, 'dist/resources/prompts');
+
+        // Every workflow prompt ships, not just the starter: spec-system-prompt-loader
+        // resolves a filename by workflow type, so a missing one resolves to a
+        // path that does not exist.
+        const SYSTEM_PROMPTS = ['spec-workflow-starter.md', 'spec-workflow-quick.md'];
 
         try {
             // Ensure directory exists
             await vscode.workspace.fs.createDirectory(vscode.Uri.file(systemPromptDir));
-            
-            // Always overwrite to ensure latest version
-            await vscode.workspace.fs.copy(vscode.Uri.file(sourcePath), vscode.Uri.file(targetPath), { overwrite: true });
-            this.outputChannel.appendLine('[AgentManager] Updated system prompt');
+
+            for (const name of SYSTEM_PROMPTS) {
+                // Always overwrite to ensure latest version
+                await vscode.workspace.fs.copy(
+                    vscode.Uri.file(path.join(sourceDir, name)),
+                    vscode.Uri.file(path.join(systemPromptDir, name)),
+                    { overwrite: true }
+                );
+            }
+            this.outputChannel.appendLine(`[AgentManager] Updated ${SYSTEM_PROMPTS.length} system prompts`);
         } catch (error) {
             this.outputChannel.appendLine(`[AgentManager] Failed to initialize system prompt: ${error}`);
         }

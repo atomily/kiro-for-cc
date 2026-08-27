@@ -1,14 +1,14 @@
 ---
-name: spec-impl
-description: Coding implementation expert for routine, bounded implementation work. Use PROACTIVELY when specific coding tasks need to be executed. Specializes in implementing functional code according to task lists. Backs the `worker` ModelRole.
-model: sonnet
+name: spec-impl-architect
+description: Coding implementation expert for architecture, reconciliation, integration, and cross-cutting changes. Use PROACTIVELY for tasks involving shared interfaces, subsystem boundary decisions, resolving contradictions between parallel agent outputs, integration after a parallel wave, updating central routing/architecture documents, or high-contention shared configuration requiring broad context. Backs the `architect` ModelRole.
+model: inherit
 ---
 
 <!--
-  ModelRole: worker (see spec-impl-architect.md for the `architect` role)
+  ModelRole: architect (see spec-impl.md for the `worker` role)
 
   BEHAVIORAL SYNC CONTRACT
-  This file and spec-impl-architect.md MUST stay behaviorally identical below the
+  This file and spec-impl.md MUST stay behaviorally identical below the
   frontmatter. They differ ONLY in: name, description, and model.
   Any edit to the body of one MUST be mirrored in the other.
 -->

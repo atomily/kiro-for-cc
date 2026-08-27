@@ -12,7 +12,10 @@ export const DEFAULT_CONFIG = {
         settings: '.claude/settings'
     },
     views: {
+        drafts: true,
         specs: true,
+        sessions: true,
+        whiteboards: true,
         steering: true,
         mcp: true,
         hooks: true,

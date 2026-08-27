@@ -7,6 +7,11 @@ import { PromptLoader } from '../../services/promptLoader';
 
 export type SpecDocumentType = 'requirements' | 'design' | 'tasks';
 
+/** Structural type so SpecManager does not depend on the whiteboard feature. */
+export interface WhiteboardMentionResolver {
+    resolveMentions(text: string): Promise<{ block: string; matched: string[]; unmatched: string[] }>;
+}
+
 export class SpecManager {
     private configManager: ConfigManager;
     private promptLoader: PromptLoader;
@@ -60,6 +65,70 @@ export class SpecManager {
         const terminal = await this.claudeProvider.invokeClaudeSplitView(prompt, 'KFC - Creating Spec');
 
         // Set up automatic terminal renaming when spec folder is created
+        this.setupSpecFolderWatcher(workspaceFolder, terminal).catch(error => {
+            this.outputChannel.appendLine(`[SpecManager] Failed to set up watcher: ${error}`);
+        });
+    }
+
+    /**
+     * Quick spec: one pass, one approval gate, no judge tree.
+     *
+     * `whiteboardBlock` is the compiled <whiteboard> section when the spec was
+     * started from a drawing; an empty string renders to nothing in the prompt.
+     */
+    /** Set after construction; whiteboards are created later in activation. */
+    private whiteboards?: WhiteboardMentionResolver;
+
+    setWhiteboardManager(whiteboards: WhiteboardMentionResolver) {
+        this.whiteboards = whiteboards;
+    }
+
+    async createQuick(whiteboardBlock: string = '', whiteboardPaths: string[] = []) {
+        const description = await vscode.window.showInputBox({
+            title: whiteboardBlock ? '⚡ Quick Spec from Whiteboard ⚡' : '⚡ Create Quick Spec ⚡',
+            prompt: 'For changes you already understand - one document, one approval, straight to tasks',
+            placeHolder: whiteboardBlock
+                ? 'What should be built from this whiteboard?'
+                : 'Describe the change (reference a whiteboard with @name)...',
+            ignoreFocusOut: false
+        });
+
+        if (!description) {
+            return;
+        }
+
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('No workspace folder open');
+            return;
+        }
+
+        // An explicit block (started from the Whiteboards view) wins; otherwise
+        // pick up any @mentions typed into the description.
+        let block = whiteboardBlock;
+        if (!block && this.whiteboards) {
+            const resolved = await this.whiteboards.resolveMentions(description);
+            block = resolved.block;
+            if (resolved.unmatched.length > 0) {
+                vscode.window.showWarningMessage(
+                    `No whiteboard named ${resolved.unmatched.map(u => `@${u}`).join(', ')}. Continuing without it.`
+                );
+            }
+        }
+
+        NotificationUtils.showAutoDismissNotification('Claude is creating your quick spec. Check the terminal for progress.');
+
+        const specBasePath = await this.getSpecBasePath();
+        const prompt = this.promptLoader.renderPrompt('create-spec-quick', {
+            description,
+            workspacePath: workspaceFolder.uri.fsPath,
+            specBasePath,
+            whiteboard: block,
+            whiteboardPaths: whiteboardPaths.join('\n')
+        });
+
+        const terminal = await this.claudeProvider.invokeClaudeSplitView(prompt, 'KFC - Quick Spec');
+
         this.setupSpecFolderWatcher(workspaceFolder, terminal).catch(error => {
             this.outputChannel.appendLine(`[SpecManager] Failed to set up watcher: ${error}`);
         });
@@ -269,6 +338,78 @@ This document has not been created yet.`;
             this.outputChannel.appendLine(`[SpecManager] Failed to delete spec: ${error}`);
             vscode.window.showErrorMessage(`Failed to delete spec: ${error}`);
         }
+    }
+
+    /**
+     * Completion counted from the checkboxes in tasks.md.
+     *
+     * Derived rather than stored: tasks.md is already the record of what is
+     * done, so a separate "complete" flag could only ever disagree with it.
+     * Returns undefined when there is no tasks.md or it has no checkboxes.
+     */
+    async getTaskProgress(specName: string): Promise<{ done: number; total: number } | undefined> {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) { return undefined; }
+
+        const specBasePath = await this.getSpecBasePath();
+        const tasksPath = path.join(workspaceFolder.uri.fsPath, specBasePath, specName, 'tasks.md');
+
+        let content: string;
+        try {
+            const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(tasksPath));
+            content = Buffer.from(bytes).toString('utf8');
+        } catch {
+            return undefined; // Spec has not reached the task stage yet.
+        }
+
+        const boxes = content.match(/^\s*[-*]\s+\[[ xX]\]/gm);
+        if (!boxes || boxes.length === 0) { return undefined; }
+
+        const done = boxes.filter(b => /\[[xX]\]/.test(b)).length;
+        return { done, total: boxes.length };
+    }
+
+    private async archiveFileUri(): Promise<vscode.Uri | undefined> {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) { return undefined; }
+        const specBasePath = await this.getSpecBasePath();
+        // Lives beside the specs. getSpecList only returns directories, so a
+        // file here is never mistaken for a spec.
+        return vscode.Uri.file(path.join(workspaceFolder.uri.fsPath, specBasePath, '.kfc-archive.json'));
+    }
+
+    async listArchived(): Promise<string[]> {
+        const uri = await this.archiveFileUri();
+        if (!uri) { return []; }
+        try {
+            const bytes = await vscode.workspace.fs.readFile(uri);
+            const parsed = JSON.parse(Buffer.from(bytes).toString('utf8'));
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    }
+
+    /**
+     * Archiving only hides a spec from the active list. The folder is never
+     * moved or deleted, so nothing that references those paths can break.
+     */
+    async setArchived(specName: string, archived: boolean): Promise<void> {
+        const uri = await this.archiveFileUri();
+        if (!uri) { return; }
+
+        const current = new Set(await this.listArchived());
+        if (archived) {
+            current.add(specName);
+        } else {
+            current.delete(specName);
+        }
+
+        await vscode.workspace.fs.writeFile(
+            uri,
+            Buffer.from(JSON.stringify([...current].sort(), null, 2), 'utf8')
+        );
+        this.outputChannel.appendLine(`[SpecManager] ${archived ? 'Archived' : 'Restored'} spec: ${specName}`);
     }
 
     async getSpecList(): Promise<string[]> {

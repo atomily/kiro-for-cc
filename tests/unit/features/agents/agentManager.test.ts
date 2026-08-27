@@ -115,19 +115,24 @@ describe('AgentManager', () => {
             expect(vscode.workspace.fs.createDirectory).toHaveBeenCalledWith(
                 expect.objectContaining({ fsPath: targetPath })
             );
-            // Should copy all built-in agents (8) + system prompt (1) = 9
-            expect(vscode.workspace.fs.copy).toHaveBeenCalledTimes(9);
+            // Derived from the real lists so adding an agent or a workflow prompt
+            // does not silently rot this assertion.
+            const agentCount = (agentManager as any).BUILT_IN_AGENTS.length;
+            const systemPromptCount = 2; // spec-workflow-starter, spec-workflow-quick
+            expect(vscode.workspace.fs.copy).toHaveBeenCalledTimes(agentCount + systemPromptCount);
             expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
-                expect.stringContaining('[AgentManager] Copied agent')
+                expect.stringContaining('[AgentManager] Updated agent')
             );
         });
 
-        test('TC-AM-003: 跳过已存在的内置 agents', async () => {
+        test('TC-AM-003: 覆盖已存在的内置 agents', async () => {
             // Arrange
-            // Mock that some agents already exist
+            // Existing files are NOT skipped: built-in agents ship with the
+            // extension, so a stale copy in the workspace must be replaced or a
+            // user keeps running last version's agent definitions.
             (vscode.workspace.fs.stat as jest.Mock).mockImplementation((uri) => {
-                const path = uri.fsPath;
-                if (path.includes('spec-requirements') || path.includes('spec-design')) {
+                const filePath = uri.fsPath;
+                if (filePath.includes('spec-requirements') || filePath.includes('spec-design')) {
                     return Promise.resolve({ type: vscode.FileType.File });
                 }
                 return Promise.reject(new Error('Not found'));
@@ -137,10 +142,12 @@ describe('AgentManager', () => {
             await agentManager.initializeBuiltInAgents();
 
             // Assert
-            // Should skip existing files (2 exist, so copy 7 - 2 = 5 agents + 1 system prompt = 6)
-            expect(vscode.workspace.fs.copy).toHaveBeenCalledTimes(6);
-            expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
-                expect.stringContaining('already exists, skipping')
+            const agentCount = (agentManager as any).BUILT_IN_AGENTS.length;
+            expect(vscode.workspace.fs.copy).toHaveBeenCalledTimes(agentCount + 2);
+            expect(vscode.workspace.fs.copy).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.anything(),
+                { overwrite: true }
             );
         });
 

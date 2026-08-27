@@ -61,7 +61,10 @@ export class PromptLoader {
     
     // Compile the template
     try {
-      const compiled = Handlebars.compile(template.content);
+      // noEscape: these render prompts for an LLM, never HTML. Without it,
+      // Handlebars turns an apostrophe into &#x27; and a compiled whiteboard
+      // block into &lt;whiteboard&gt; with &quot; around every label.
+      const compiled = Handlebars.compile(template.content, { noEscape: true });
       this.compiledTemplates.set(id, compiled);
     } catch (error) {
       console.error(`Failed to compile template ${id}:`, error);

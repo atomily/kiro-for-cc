@@ -14,11 +14,20 @@ import { CONFIG_FILE_NAME, VSC_CONFIG_NAMESPACE } from './constants';
 import { PromptLoader } from './services/promptLoader';
 import { UpdateChecker } from './utils/updateChecker';
 import { SpecTaskCodeLensProvider } from './providers/specTaskCodeLensProvider';
+import { SessionsExplorerProvider } from './providers/sessionsExplorerProvider';
+import { AgentTranscriptProvider, AGENT_TRANSCRIPT_SCHEME } from './providers/agentTranscriptProvider';
+import { SessionInfo, SubagentInfo } from './features/sessions/sessionMonitor';
+import { WhiteboardManager, WhiteboardInfo } from './features/whiteboard/whiteboardManager';
+import { WhiteboardsExplorerProvider } from './providers/whiteboardsExplorerProvider';
+import { DraftManager, DraftRecord } from './features/draft/draftManager';
+import { DraftsExplorerProvider } from './providers/draftsExplorerProvider';
 
 let claudeCodeProvider: ClaudeCodeProvider;
 let specManager: SpecManager;
 let steeringManager: SteeringManager;
 let agentManager: AgentManager;
+let whiteboardManager: WhiteboardManager;
+let draftManager: DraftManager;
 export let outputChannel: vscode.OutputChannel;
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -60,6 +69,18 @@ export async function activate(context: vscode.ExtensionContext) {
     const hooksExplorer = new HooksExplorerProvider(context);
     const mcpExplorer = new MCPExplorerProvider(context, outputChannel);
     const agentsExplorer = new AgentsExplorerProvider(context, agentManager, outputChannel);
+    whiteboardManager = new WhiteboardManager(outputChannel, () => specBasePathCache);
+    specManager.setWhiteboardManager(whiteboardManager);
+    specExplorer.setWhiteboardManager(whiteboardManager);
+    const sessionsExplorer = new SessionsExplorerProvider(
+        outputChannel,
+        sessionId => claudeCodeProvider.getTerminalForSession(sessionId) !== undefined,
+        () => claudeCodeProvider.getLaunchedSessionIds()
+    );
+    const whiteboardsExplorer = new WhiteboardsExplorerProvider(whiteboardManager);
+    draftManager = new DraftManager(claudeCodeProvider, outputChannel, whiteboardManager);
+    const draftsExplorer = new DraftsExplorerProvider(draftManager);
+    const agentTranscriptProvider = new AgentTranscriptProvider(outputChannel);
 
     // Set managers
     specExplorer.setSpecManager(specManager);
@@ -71,7 +92,25 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.registerTreeDataProvider('kfc.views.agentsExplorer', agentsExplorer),
         vscode.window.registerTreeDataProvider('kfc.views.steeringExplorer', steeringExplorer),
         vscode.window.registerTreeDataProvider('kfc.views.hooksStatus', hooksExplorer),
-        vscode.window.registerTreeDataProvider('kfc.views.mcpServerStatus', mcpExplorer)
+        vscode.window.registerTreeDataProvider('kfc.views.mcpServerStatus', mcpExplorer),
+        vscode.window.registerTreeDataProvider('kfc.views.whiteboardsExplorer', whiteboardsExplorer),
+        vscode.window.registerTreeDataProvider('kfc.views.draftsExplorer', draftsExplorer),
+        whiteboardsExplorer,
+        draftsExplorer
+    );
+
+    // Sessions uses createTreeView rather than registerTreeDataProvider so the
+    // provider can stop polling while the view is off screen.
+    const sessionsView = vscode.window.createTreeView('kfc.views.sessionsExplorer', {
+        treeDataProvider: sessionsExplorer
+    });
+    sessionsExplorer.setVisible(sessionsView.visible);
+    context.subscriptions.push(
+        sessionsView,
+        sessionsExplorer,
+        agentTranscriptProvider,
+        sessionsView.onDidChangeVisibility(e => sessionsExplorer.setVisible(e.visible)),
+        vscode.workspace.registerTextDocumentContentProvider(AGENT_TRANSCRIPT_SCHEME, agentTranscriptProvider)
     );
 
     // Initialize update checker
@@ -79,6 +118,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Register commands
     registerCommands(context, specExplorer, steeringExplorer, hooksExplorer, mcpExplorer, agentsExplorer, updateChecker);
+    registerSessionCommands(context, sessionsExplorer);
+    registerWhiteboardCommands(context, whiteboardsExplorer);
+    registerDraftCommands(context, draftsExplorer);
 
     // Initialize default settings file if not exists
     await initializeDefaultSettings();
@@ -352,6 +394,16 @@ function registerCommands(context: vscode.ExtensionContext, specExplorer: SpecEx
     context.subscriptions.push(
         vscode.commands.registerCommand('kfc.spec.delete', async (item: any) => {
             await specManager.delete(item.label);
+        }),
+
+        vscode.commands.registerCommand('kfc.spec.archive', async (item: any) => {
+            await specManager.setArchived(item.specName ?? item.label, true);
+            specExplorer.refresh();
+        }),
+
+        vscode.commands.registerCommand('kfc.spec.unarchive', async (item: any) => {
+            await specManager.setArchived(item.specName ?? item.label, false);
+            specExplorer.refresh();
         })
     );
 
@@ -498,4 +550,236 @@ function setupFileWatchers(
 
 export function deactivate() {
     // Nothing to clean up
+}
+
+function registerSessionCommands(
+    context: vscode.ExtensionContext,
+    sessionsExplorer: SessionsExplorerProvider
+) {
+    context.subscriptions.push(
+        vscode.commands.registerCommand('kfc.sessions.refresh', () => {
+            outputChannel.appendLine('[Manual Refresh] Refreshing sessions explorer...');
+            sessionsExplorer.refresh();
+        }),
+
+        vscode.commands.registerCommand('kfc.sessions.focusTerminal', (session: SessionInfo) => {
+            const terminal = claudeCodeProvider.getTerminalForSession(session.sessionId);
+            if (terminal) {
+                terminal.show();
+                return;
+            }
+            // Sessions started outside the extension have no terminal handle we
+            // can recover, so say so rather than silently doing nothing.
+            vscode.window.showInformationMessage(
+                `"${session.name}" was started outside Kiro, so its terminal can't be focused. Expand it to read its subagents.`
+            );
+        }),
+
+        vscode.commands.registerCommand('kfc.sessions.openTranscript', async (agent: SubagentInfo) => {
+            const uri = AgentTranscriptProvider.uriFor(agent);
+            const doc = await vscode.workspace.openTextDocument(uri);
+            await vscode.languages.setTextDocumentLanguage(doc, 'markdown');
+            // preview + preserveFocus is what makes clicking through the tree
+            // retarget one tab instead of stacking tabs, with focus left in the tree.
+            await vscode.window.showTextDocument(doc, {
+                preview: true,
+                preserveFocus: true,
+                viewColumn: vscode.ViewColumn.Beside
+            });
+        })
+    );
+}
+
+/**
+ * Spec base path, refreshed on activation. WhiteboardManager needs it
+ * synchronously to resolve spec-scoped boards, but SpecManager exposes it as a
+ * promise, so it is cached here rather than made async all the way down.
+ */
+let specBasePathCache = '.claude/specs';
+
+function registerWhiteboardCommands(
+    context: vscode.ExtensionContext,
+    whiteboardsExplorer: WhiteboardsExplorerProvider
+) {
+    specManager.getSpecBasePath()
+        .then(p => { specBasePathCache = p; })
+        .catch(() => { /* keep the default */ });
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('kfc.whiteboard.create', async () => {
+            const name = await vscode.window.showInputBox({
+                title: 'New Whiteboard',
+                prompt: 'Sketch UI elements and flows - they compile into spec requirements',
+                placeHolder: 'e.g. sessions-sidebar'
+            });
+            if (!name) { return; }
+
+            const uri = await whiteboardManager.create(name);
+            if (uri) {
+                whiteboardsExplorer.refresh();
+                await whiteboardManager.open(uri.fsPath);
+            }
+        }),
+
+        vscode.commands.registerCommand('kfc.whiteboard.open', async (board: WhiteboardInfo) => {
+            await whiteboardManager.open(board.path);
+        }),
+
+        vscode.commands.registerCommand('kfc.whiteboard.refresh', () => {
+            whiteboardsExplorer.refresh();
+        }),
+
+        // Shows the compiled scene, so you can see exactly what the agent will
+        // read before committing to a spec run.
+        vscode.commands.registerCommand('kfc.whiteboard.preview', async (arg?: any) => {
+            const board = await resolveWhiteboardArg(arg);
+            if (!board) { return; }
+            const compiled = await whiteboardManager.compile(board.path);
+            if (compiled.lines.length === 0) {
+                vscode.window.showInformationMessage(
+                    `"${board.name}" has nothing to compile yet. Add labelled shapes, arrows between them, or text notes.`
+                );
+                return;
+            }
+            const doc = await vscode.workspace.openTextDocument({
+                language: 'markdown',
+                content: [
+                    `# ${board.name} - compiled`,
+                    '',
+                    `${compiled.shapeCount} shapes · ${compiled.edgeCount} edges · ${compiled.noteCount} notes`,
+                    '',
+                    '```',
+                    ...compiled.lines,
+                    '```'
+                ].join('\n')
+            });
+            await vscode.window.showTextDocument(doc, { preview: true, viewColumn: vscode.ViewColumn.Beside });
+        }),
+
+        vscode.commands.registerCommand('kfc.spec.createQuick', async () => {
+            await specManager.createQuick();
+        }),
+
+        vscode.commands.registerCommand('kfc.draft.createFromWhiteboard', async (arg?: any) => {
+            const boards = await pickWhiteboards(arg, 'Draft from which whiteboard?');
+            if (!boards) { return; }
+            const block = await whiteboardManager.compileForPrompt(boards);
+            if (!block) {
+                vscode.window.showWarningMessage(
+                    'That whiteboard compiled to nothing. Add labelled shapes, bound arrows, or notes first.'
+                );
+                return;
+            }
+            if (await draftManager.create(block)) {
+                vscode.commands.executeCommand('kfc.draft.refresh');
+            }
+        }),
+
+        vscode.commands.registerCommand('kfc.spec.createQuickFromWhiteboard', async (arg?: any) => {
+            const board = unwrapWhiteboard(arg);
+            let boards: WhiteboardInfo[] = board ? [board] : [];
+
+            if (boards.length === 0) {
+                const available = await whiteboardManager.listAll();
+                if (available.length === 0) {
+                    vscode.window.showInformationMessage('No whiteboards yet. Create one first.');
+                    return;
+                }
+                const picked = await vscode.window.showQuickPick(
+                    available.map(b => ({ label: b.name, board: b })),
+                    { title: 'Which whiteboard?', canPickMany: true }
+                );
+                if (!picked || picked.length === 0) { return; }
+                boards = picked.map(p => p.board);
+            }
+
+            const block = await whiteboardManager.compileForPrompt(boards);
+            if (!block) {
+                vscode.window.showWarningMessage(
+                    'That whiteboard compiled to nothing. Add labelled shapes, bound arrows, or notes first.'
+                );
+                return;
+            }
+            await specManager.createQuick(block, boards.map(b => b.path));
+        })
+    );
+}
+
+function registerDraftCommands(
+    context: vscode.ExtensionContext,
+    draftsExplorer: DraftsExplorerProvider
+) {
+    context.subscriptions.push(
+        vscode.commands.registerCommand('kfc.draft.create', async () => {
+            if (await draftManager.create()) {
+                draftsExplorer.refresh();
+            }
+        }),
+
+        vscode.commands.registerCommand('kfc.draft.resume', async (arg: any) => {
+            // Inline menu buttons hand over the TreeItem; TreeItem.command hands
+            // over the record itself. Accept either.
+            const draft: DraftRecord = arg?.draft ?? arg;
+            if (!draft?.sessionId) { return; }
+            await draftManager.resume(draft);
+        }),
+
+        vscode.commands.registerCommand('kfc.draft.delete', async (item: any) => {
+            const draft: DraftRecord = item?.draft ?? item;
+            // Only Kiro's pointer goes away; the Claude session is untouched and
+            // still resumable by id from the CLI.
+            await draftManager.delete(draft);
+            draftsExplorer.refresh();
+        }),
+
+        vscode.commands.registerCommand('kfc.draft.refresh', () => {
+            draftsExplorer.refresh();
+        })
+    );
+}
+
+/**
+ * Tree commands are reached two ways with different payloads: an inline menu
+ * button passes the TreeItem, while TreeItem.command passes explicit arguments.
+ * Everything that can be invoked both ways has to accept both.
+ */
+function unwrapWhiteboard(arg: any): WhiteboardInfo | undefined {
+    if (!arg) { return undefined; }
+    if (arg.board?.path) { return arg.board; }
+    if (arg.path) { return arg as WhiteboardInfo; }
+    return undefined;
+}
+
+/** Falls back to a picker when invoked from the command palette with no target. */
+async function resolveWhiteboardArg(arg: any): Promise<WhiteboardInfo | undefined> {
+    const direct = unwrapWhiteboard(arg);
+    if (direct) { return direct; }
+
+    const available = await whiteboardManager.listAll();
+    if (available.length === 0) {
+        vscode.window.showInformationMessage('No whiteboards yet. Create one first.');
+        return undefined;
+    }
+    const picked = await vscode.window.showQuickPick(
+        available.map(b => ({ label: b.name, description: b.specName, board: b })),
+        { title: 'Preview which whiteboard?' }
+    );
+    return picked?.board;
+}
+
+/** Resolves a command target to one or more boards, prompting when invoked bare. */
+async function pickWhiteboards(arg: any, title: string): Promise<WhiteboardInfo[] | undefined> {
+    const direct = unwrapWhiteboard(arg);
+    if (direct) { return [direct]; }
+
+    const available = await whiteboardManager.listAll();
+    if (available.length === 0) {
+        vscode.window.showInformationMessage('No whiteboards yet. Create one first.');
+        return undefined;
+    }
+    const picked = await vscode.window.showQuickPick(
+        available.map(b => ({ label: b.name, description: b.specName, board: b })),
+        { title, canPickMany: true }
+    );
+    return picked && picked.length > 0 ? picked.map(p => p.board) : undefined;
 }

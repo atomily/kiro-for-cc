@@ -2,7 +2,7 @@
   "name": "kiro-for-cc",
   "displayName": "Kiro for Claude Code",
   "description": "Spec-driven development with Claude Code - inspired by Kiro",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "heisebaiyun",
   "icon": "icon.png",
   "repository": {
@@ -34,9 +34,24 @@
     "views": {
       "kfc": [
         {
+          "id": "kfc.views.draftsExplorer",
+          "name": "Drafts",
+          "when": "!(workbenchState == empty || workspaceFolderCount == 0) && config.kfc.views.drafts.visible"
+        },
+        {
           "id": "kfc.views.specExplorer",
           "name": "Specs",
           "when": "!(workbenchState == empty || workspaceFolderCount == 0) && config.kfc.views.specs.visible"
+        },
+        {
+          "id": "kfc.views.sessionsExplorer",
+          "name": "Sessions",
+          "when": "!(workbenchState == empty || workspaceFolderCount == 0) && config.kfc.views.sessions.visible"
+        },
+        {
+          "id": "kfc.views.whiteboardsExplorer",
+          "name": "Whiteboards",
+          "when": "!(workbenchState == empty || workspaceFolderCount == 0) && config.kfc.views.whiteboards.visible"
         },
         {
           "id": "kfc.views.agentsExplorer",
@@ -86,6 +101,18 @@
       {
         "view": "kfc.views.mcpServerStatus",
         "contents": "Connect to external tools and services\nUse 'claude mcp add' to configure servers"
+      },
+      {
+        "view": "kfc.views.sessionsExplorer",
+        "contents": "No Kiro sessions running.\nStart a draft or a spec, and its agents appear here."
+      },
+      {
+        "view": "kfc.views.whiteboardsExplorer",
+        "contents": "Sketch UI and flows, then compile them into a spec\n\n[$(add) New Whiteboard](command:kfc.whiteboard.create)"
+      },
+      {
+        "view": "kfc.views.draftsExplorer",
+        "contents": "One-off work with no spec overhead\n\n[$(add) New Draft](command:kfc.draft.create)"
       }
     ],
     "commands": [
@@ -201,6 +228,100 @@
         "command": "kfc.spec.implTask",
         "title": "Implement Task",
         "category": "Kiro for CC"
+      },
+      {
+        "command": "kfc.sessions.refresh",
+        "title": "Refresh Sessions",
+        "category": "Kiro for CC",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "kfc.sessions.focusTerminal",
+        "title": "Focus Session Terminal",
+        "category": "Kiro for CC",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "kfc.sessions.openTranscript",
+        "title": "Open Agent Transcript",
+        "category": "Kiro for CC"
+      },
+      {
+        "command": "kfc.spec.createQuick",
+        "title": "Create Quick Spec",
+        "category": "Kiro for CC",
+        "icon": "$(zap)"
+      },
+      {
+        "command": "kfc.spec.createQuickFromWhiteboard",
+        "title": "Spec from Whiteboard",
+        "category": "Kiro for CC",
+        "icon": "$(zap)"
+      },
+      {
+        "command": "kfc.whiteboard.create",
+        "title": "New Whiteboard",
+        "category": "Kiro for CC",
+        "icon": "$(add)"
+      },
+      {
+        "command": "kfc.whiteboard.open",
+        "title": "Open Whiteboard",
+        "category": "Kiro for CC"
+      },
+      {
+        "command": "kfc.whiteboard.preview",
+        "title": "Preview Compiled Whiteboard",
+        "category": "Kiro for CC",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "kfc.whiteboard.refresh",
+        "title": "Refresh Whiteboards",
+        "category": "Kiro for CC",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "kfc.draft.create",
+        "title": "New Draft",
+        "category": "Kiro for CC",
+        "icon": "$(add)"
+      },
+      {
+        "command": "kfc.draft.resume",
+        "title": "Resume Draft",
+        "category": "Kiro for CC",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "kfc.draft.delete",
+        "title": "Remove Draft",
+        "category": "Kiro for CC",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "kfc.draft.refresh",
+        "title": "Refresh Drafts",
+        "category": "Kiro for CC",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "kfc.spec.archive",
+        "title": "Archive Spec",
+        "category": "Kiro for CC",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "kfc.spec.unarchive",
+        "title": "Restore Spec",
+        "category": "Kiro for CC",
+        "icon": "$(history)"
+      },
+      {
+        "command": "kfc.draft.createFromWhiteboard",
+        "title": "Draft from Whiteboard",
+        "category": "Kiro for CC",
+        "icon": "$(edit)"
       }
     ],
     "menus": {
@@ -254,6 +375,36 @@
           "command": "kfc.agents.refresh",
           "when": "view == kfc.views.agentsExplorer",
           "group": "navigation"
+        },
+        {
+          "command": "kfc.sessions.refresh",
+          "when": "view == kfc.views.sessionsExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "kfc.spec.createQuick",
+          "when": "view == kfc.views.specExplorer",
+          "group": "navigation@0"
+        },
+        {
+          "command": "kfc.whiteboard.create",
+          "when": "view == kfc.views.whiteboardsExplorer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "kfc.whiteboard.refresh",
+          "when": "view == kfc.views.whiteboardsExplorer",
+          "group": "navigation@2"
+        },
+        {
+          "command": "kfc.draft.create",
+          "when": "view == kfc.views.draftsExplorer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "kfc.draft.refresh",
+          "when": "view == kfc.views.draftsExplorer",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -271,6 +422,41 @@
           "command": "kfc.steering.delete",
           "when": "view == kfc.views.steeringExplorer && viewItem == steering-document",
           "group": "7_modification"
+        },
+        {
+          "command": "kfc.spec.createQuickFromWhiteboard",
+          "when": "view == kfc.views.whiteboardsExplorer && viewItem == kfc-whiteboard",
+          "group": "inline@1"
+        },
+        {
+          "command": "kfc.draft.resume",
+          "when": "view == kfc.views.draftsExplorer && viewItem == kfc-draft",
+          "group": "inline@1"
+        },
+        {
+          "command": "kfc.draft.delete",
+          "when": "view == kfc.views.draftsExplorer && viewItem == kfc-draft",
+          "group": "inline@2"
+        },
+        {
+          "command": "kfc.spec.archive",
+          "when": "view == kfc.views.specExplorer && viewItem == spec",
+          "group": "inline@1"
+        },
+        {
+          "command": "kfc.spec.unarchive",
+          "when": "view == kfc.views.specExplorer && viewItem == spec-archived",
+          "group": "inline@1"
+        },
+        {
+          "command": "kfc.draft.createFromWhiteboard",
+          "when": "view == kfc.views.whiteboardsExplorer && viewItem == kfc-whiteboard",
+          "group": "inline@0"
+        },
+        {
+          "command": "kfc.sessions.focusTerminal",
+          "when": "view == kfc.views.sessionsExplorer && viewItem == kfc-session-owned",
+          "group": "inline@1"
         }
       ],
       "commandPalette": [
@@ -283,6 +469,34 @@
         },
         {
           "command": "kfc.checkForUpdates"
+        },
+        {
+          "command": "kfc.sessions.focusTerminal",
+          "when": "false"
+        },
+        {
+          "command": "kfc.sessions.openTranscript",
+          "when": "false"
+        },
+        {
+          "command": "kfc.whiteboard.open",
+          "when": "false"
+        },
+        {
+          "command": "kfc.draft.resume",
+          "when": "false"
+        },
+        {
+          "command": "kfc.spec.archive",
+          "when": "false"
+        },
+        {
+          "command": "kfc.spec.unarchive",
+          "when": "false"
+        },
+        {
+          "command": "kfc.sessions.focusTerminal",
+          "when": "false"
         }
       ]
     },
@@ -293,6 +507,75 @@
           "type": "string",
           "default": "claude",
           "description": "Path to Claude Code CLI executable"
+        },
+        "kfc.claude.model": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "sonnet",
+            "opus",
+            "haiku",
+            "fable"
+          ],
+          "description": "Model for sessions Kiro launches (--model). Empty inherits your Claude Code settings. Pin to \"sonnet\" for fast demos."
+        },
+        "kfc.claude.effort": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "description": "Reasoning effort for sessions Kiro launches (--effort). Empty inherits your Claude Code settings. \"medium\" is markedly faster than \"high\"."
+        },
+        "kfc.claude.permissionMode": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "default",
+            "acceptEdits",
+            "plan",
+            "bypassPermissions"
+          ],
+          "enumDescriptions": [
+            "Inherit your Claude Code settings (recommended)",
+            "Prompt for anything not already allowed",
+            "Auto-accept file edits, still prompt for other tools",
+            "Plan only, make no changes",
+            "Skip all permission prompts - only in a throwaway folder you trust"
+          ],
+          "description": "Permission mode for sessions Kiro launches (--permission-mode). Empty inherits your Claude Code settings."
+        },
+        "kfc.drafts.model": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "sonnet",
+            "opus",
+            "haiku",
+            "fable"
+          ],
+          "description": "Model for Drafts (--model). Empty inherits your Claude Code settings. Drafts are short, so inheriting Opus is usually fine."
+        },
+        "kfc.drafts.effort": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "description": "Reasoning effort for Drafts (--effort). Empty inherits your Claude Code settings."
         },
         "kfc.autoRefreshSpecs": {
           "type": "boolean",
@@ -308,6 +591,26 @@
           "type": "boolean",
           "default": true,
           "description": "Show Specs view"
+        },
+        "kfc.views.drafts.visible": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Drafts view"
+        },
+        "kfc.views.sessions.visible": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Sessions view"
+        },
+        "kfc.sessions.showAll": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also show Claude Code sessions that Kiro did not launch. Off by default: the Sessions view is for watching work this extension dispatched."
+        },
+        "kfc.views.whiteboards.visible": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Whiteboards view"
         },
         "kfc.views.agents.visible": {
           "type": "boolean",
